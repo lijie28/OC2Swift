@@ -23,6 +23,39 @@ replaceRegularExpression = [
 funcReplaceRegularExpression = [
 ]
 
+    
+def mainReplaceFunc(lines, mainFunc, mainStatement, appendlineStatement):
+    outputLines = []
+    currentLine = ""
+    appendLineFlag = False
+    for i, line in enumerate(lines):
+        if line.startswith("//"):
+            continue
+        elif appendLineFlag:
+            if appendlineStatement(line):
+                currentLine = currentLine + line.replace("\n", " ")
+                appendLineFlag = True
+                continue
+            else:
+                currentLine = currentLine + line
+                appendLineFlag = False
+                currentLine = mainFunc(currentLine)
+        elif mainStatement(line):
+            if appendlineStatement(line):
+                currentLine = line.replace("\n", " ")
+                appendLineFlag = True
+                continue
+            else:
+                currentLine = line
+                appendLineFlag = False
+                currentLine = mainFunc(currentLine)
+        else:
+            currentLine = line
+            appendLineFlag = False
+        outputLines.append(currentLine)
+    return outputLines
+    
+
 def replaceOthers(lines):
     outputLines = lines
     for expressions in replaceRegularExpression:
@@ -45,9 +78,12 @@ def replaceComment(lines):
     outputLines = []
     currentLine = ""
     for i, line in enumerate(lines):
-        if "//" in line:
+        if line.startswith("//"):
             currentLine = re.sub('//(\S)', '// \\1', line)
             currentLine = re.sub('//\s*', '// ', currentLine)
+        elif "//" in line:
+            currentLine = re.sub('//\s*', '// ', line)
+            currentLine = re.sub('(\s*)//', '\n//', currentLine)
         else:
             currentLine = line
         outputLines.append(currentLine)
@@ -55,113 +91,60 @@ def replaceComment(lines):
     
     
 def replaceIf(lines):
-    outputLines = []
-    currentLine = ""
-    appendLine = False
-    for i, line in enumerate(lines):
-        if line.startswith("//"):
-            continue
-        elif appendLine:
-            if "{" not in line:
-                currentLine = currentLine + line.replace("\n", " ")
-                appendLine = True
-                continue
-            else:
-                currentLine = currentLine + line
-                appendLine = False
-#                currentLine = cleanSpace(currentLine)
-                currentLine = re.sub(' +', ' ', currentLine)
-                currentLine = re.sub('if\s*\((.*)\)\s*\{', 'if \\1 {', currentLine)
-        elif "if" in line and "return" not in line:
-            if "{" not in line:
-                currentLine = line.replace("\n", " ")
-                appendLine = True
-                continue
-            else:
-                currentLine = line
-                appendLine = False
-#                currentLine = cleanSpace(currentLine)
-                currentLine = re.sub('if\s*\((.*)\)\s*\{', 'if \\1 {', currentLine)
-        else:
-            currentLine = line
-            appendLine = False
-        outputLines.append(currentLine)
-    return outputLines
+    def _mainFunc(line):
+        return re.sub('if\s*\((.*)\)\s*\{', 'if \\1 {', line)
+    def _mainStatement(line):
+        return ("if" in line) and ("return" not in line)
+    def _appendlineStatement(line):
+        return ("{" not in line)
+    return mainReplaceFunc(lines, _mainFunc, _mainStatement, _appendlineStatement)
     
-    
+
 def replaceFunc(lines):
-    outputLines = []
-    currentLine = ""
-    appendLine = False
-    for i, line in enumerate(lines):
-        if line.startswith("//"):
-            continue
-        elif appendLine:
-            if not line.endswith("{\n"):
-                currentLine = currentLine + line.replace("\n", " ")
-                appendLine = True
-                continue
-            else:
-                currentLine = currentLine + line
-                appendLine = False
-                currentLine = cleanSpace(currentLine).replace("-(", "- (").replace(") ", ")")
-                regularExpression, replaceStr = getParaReplace(currentLine)
-                currentLine = re.sub(regularExpression, replaceStr, currentLine)
-                currentLine = cleanVoid(currentLine)
-#                print(currentLine)
-        elif line.startswith("- (") or line.startswith("-("):
-#        elif line.startswith("-\s*("):
-            if not line.endswith("{\n"):
-                currentLine = line.replace("\n", " ")
-                appendLine = True
-                continue
-            else:
-                currentLine = line
-                appendLine = False
-                currentLine = cleanSpace(currentLine).replace("-(", "- (").replace(") ", ")")
-                regularExpression, replaceStr = getParaReplace(currentLine)
-                currentLine = re.sub(regularExpression, replaceStr, currentLine)
-                currentLine = cleanVoid(currentLine)
-#                print(currentLine)
-        else:
-            currentLine = line
-            appendLine = False
-        outputLines.append(currentLine)
-    return outputLines
+    def _mainFunc(currentLine):
+        currentLine = cleanSpace(currentLine).replace("-(", "- (").replace(") ", ")")
+        regularExpression, replaceStr = getParaReplace(currentLine)
+        currentLine = re.sub(regularExpression, replaceStr, currentLine)
+        return cleanVoid(currentLine)
+    def _mainStatement(line):
+        return line.startswith("- (") or line.startswith("-(")
+    def _appendlineStatement(line):
+        return not line.endswith("{\n")
+    return mainReplaceFunc(lines, _mainFunc, _mainStatement, _appendlineStatement)
 
 
 def replaceExecutes(lines):
     outputLines = []
     currentLine = ""
-#    appendLine = False
+#    appendLineFlag = False
     for i, line in enumerate(lines):
         if line.startswith("//"):
             continue
-#        elif appendLine:
+#        elif appendLineFlag:
 #            if "]" not in line:
 #                currentLine = currentLine + line.replace("\n", " ")
-#                appendLine = True
+#                appendLineFlag = True
 #                continue
 #            else:
 #                currentLine = currentLine + line
-#                appendLine = False
+#                appendLineFlag = False
 ##                currentLine = re.sub("\s+", " ", currentLine)
 #                regularExpression, replaceStr = getExecutesReplace(currentLine)
 #                currentLine = re.sub(regularExpression, replaceStr, currentLine)
         elif ("[" in line and "@[" not in line) or (line.count("[") > line.count("@[")):
 #            if "]" not in line:
 #                currentLine = line.replace("\n", " ")
-#                appendLine = True
+#                appendLineFlag = True
 #                continue
 #            else:
             currentLine = line
-            appendLine = False
+            appendLineFlag = False
 #                currentLine = re.sub("\s+", " ", currentLine)
             regularExpression, replaceStr = getExecutesReplace(currentLine)
             currentLine = re.sub(regularExpression, replaceStr, currentLine)
         else:
             currentLine = line
-            appendLine = False
+            appendLineFlag = False
         outputLines.append(currentLine)
     return outputLines
 
@@ -218,41 +201,16 @@ def getExecutesReplace(text):
     
     
 def replaceAlloc(lines):
-    outputLines = []
-    currentLine = ""
-    appendLine = False
-    for i, line in enumerate(lines):
-        if line.startswith("//"):
-            continue
-        elif appendLine:
-            if "];" not in line:
-                currentLine = currentLine + line.replace("\n", " ")
-                appendLine = True
-                continue
-            else:
-                currentLine = currentLine + line
-                appendLine = False
-                currentLine = re.sub("\s+", " ", currentLine)
-                regularExpression, replaceStr = getAllocReplace(currentLine)
-                currentLine = re.sub(regularExpression, replaceStr, currentLine)
-#                print(currentLine)
-        elif "alloc" in line and "=" in line:
-            if "];" not in line:
-                currentLine = line.replace("\n", " ")
-                appendLine = True
-                continue
-            else:
-                currentLine = line
-                appendLine = False
-                currentLine = re.sub("\s+", " ", currentLine)
-                regularExpression, replaceStr = getAllocReplace(currentLine)
-                currentLine = re.sub(regularExpression, replaceStr, currentLine)
-#                print(currentLine)
-        else:
-            currentLine = line
-            appendLine = False
-        outputLines.append(currentLine)
-    return outputLines
+    def _mainFunc(currentLine):
+        currentLine = re.sub("\s+", " ", currentLine)
+        regularExpression, replaceStr = getAllocReplace(currentLine)
+        currentLine = re.sub(regularExpression, replaceStr, currentLine)
+        return currentLine
+    def _mainStatement(line):
+        return "alloc" in line and "=" in line
+    def _appendlineStatement(line):
+        return "];" not in line
+    return mainReplaceFunc(lines, _mainFunc, _mainStatement, _appendlineStatement)
     
     
 def getAllocReplace(text):
@@ -316,12 +274,12 @@ if __name__ == '__main__':
         lines = f.readlines()
         print("open:", filename)
         print("="*50)
-        outputLins = replaceFunc(lines)
+        outputLins = replaceComment(lines)
+        outputLins = replaceFunc(outputLins)
         outputLins = replaceAlloc(outputLins)
         outputLins = replaceExecutes(outputLins)
         outputLins = replaceIf(outputLins)
         outputLins = replaceOthers(outputLins)
-        outputLins = replaceComment(outputLins)
         f.close()
         output = ""
         for line in outputLins:
