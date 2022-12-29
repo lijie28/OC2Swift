@@ -1,5 +1,8 @@
 import sys
 import re
+from enum import Enum
+import json
+import requests
 
 replaceRegularExpression = [
                             ['if\s*\((.*)\)\s*\{', 'if \\1 {'],
@@ -100,11 +103,203 @@ def replaceIf(lines):
     return mainReplaceFunc(lines, _mainFunc, _mainStatement, _appendlineStatement)
     
 
+class WordType(Enum):
+    none = 0
+    returnType = 1
+    body = 2
+    parameter = 3
+    argument = 4
+    
+class RecordType(Enum):
+    none = 0
+    keyword = 1
+    identifier = 2
+    typeIdentifier = 3
+    frontSpace = 4
+    space = 5
+    symble = 6
+    text = 7
+    end = 8
+    
+    
+class WordSplit:
+    word = ""
+    recordList = []
+    wordList = []
+    wordType = WordType.none
+    recordingType = RecordType.none
+    
+    def clear(self):
+        self.word = ""
+        self.recordList = []
+        self.wordList = []
+        self.wordType = WordType.none
+        self.recordingType = RecordType.none
+    
+    def getWords(self):
+        words = []
+        for (word, type) in self.wordList:
+            words.append(word)
+        return words
+    
+    def getSearchWords(self):
+        words = []
+        for (word, type) in self.wordList:
+            if type == WordType.body:
+                words.append(self.resetWord(word))
+        return words
+        
+    def resetWord(self, word):
+        if not word.lower().find("at") == -1:
+            index = word.lower().find("at")
+            return word[:index+2]
+        elif not word.lower().find("with") == -1:
+            index = word.lower().find("with")
+            return word[:index+4]
+        elif not word.lower().find("from") == -1:
+            index = word.lower().find("from")
+            return word[:index+4]
+        else:
+            return word
+        
+    def getLine(self):
+        line = ""
+        for letter in self.recordList:
+            line = line + letter
+        return line
+    
+    def isSymble(self, letter):
+        return letter in [")", "(", "-", ":", ";", "*"]
+        
+    def addCurrentWord(self, nextWordType):
+        if not self.word == "":
+            self.wordList.append((self.word, self.wordType))
+            self.wordType = nextWordType
+            self.word = ""
+    
+    def input(self, letter):
+        # from left to right
+        output = None
+        if letter == " ":
+            if len(self.recordList) == 0:
+                self.recordList.append(letter)
+                self.recordingType = RecordType.frontSpace
+            else:
+                if self.recordingType == RecordType.frontSpace:
+                    self.recordList.append(letter)
+                else:
+                    if self.recordList[-1] == " ":
+                        # cause last one already was space, this one can skip
+                        self.recordingType = RecordType.none
+                    else:
+                        self.recordList.append(letter)
+                        self.recordingType = RecordType.space
+        elif letter == "-":
+            if len(self.recordList) == 0:
+                self.recordList.append(letter)
+                self.recordingType = RecordType.symble
+            else:
+#                self.wordList.clear()
+                self.recordList.clear()
+                self.recordList.append(letter)
+                self.recordingType = RecordType.symble
+        elif letter == "(":
+            if self.recordList.count("(") == 0:
+                self.wordType = WordType.returnType
+                if self.recordList[-1] == " ":
+                    self.recordList.pop()
+            else:
+                self.wordType = WordType.parameter
+            self.recordList.append(letter)
+            self.recordingType = RecordType.symble
+        elif letter == ")":
+            if self.wordType == WordType.returnType:
+                self.addCurrentWord(WordType.body)
+            elif self.wordType == WordType.parameter:
+                self.addCurrentWord(WordType.argument)
+            else:
+                print("error letter )")
+                # todo、想定外
+            if self.recordList[-1] == " ":
+                self.recordList.pop()
+            self.recordList.append(letter)
+            self.recordingType = RecordType.symble
+        elif letter == ";":
+            self.addCurrentWord(WordType.none)
+            if self.recordList[-1] == " ":
+                self.recordList.pop()
+            self.recordList.append(letter)
+            self.recordingType = RecordType.end
+        elif letter == "{":
+            self.addCurrentWord(WordType.none)
+            if not self.recordList[-1] == " ":
+                self.recordList.append(" ")
+            self.recordList.append(letter)
+            self.recordingType = RecordType.end
+        elif letter == "*":
+            if not self.recordList[-1] == " ":
+                self.recordList.append(" ")
+            self.recordList.append(letter)
+            self.recordingType = RecordType.symble
+        elif letter == ":":
+            self.addCurrentWord(WordType.parameter)
+            if self.recordList[-1] == " ":
+                self.recordList.pop()
+            self.recordList.append(letter)
+            self.recordingType = RecordType.text
+        else:
+            if self.recordList[-1] == " ":
+                self.addCurrentWord(WordType.body)
+                if self.isSymble(self.recordList[-2]):
+                    self.recordList.pop()
+            self.recordList.append(letter)
+            self.recordingType = RecordType.text
+            self.word = self.word + letter
+                    
+                    
+def searchFromApple(word):
+    url = 'https://developer.apple.com/search/search_data.php?q=%s' % word
+    res = requests.get(url)
+    return res.text
+        
 def replaceFunc(lines):
+    def _dealStatement(currentLine):
+        wordSplit = WordSplit()
+        wordSplit.clear()
+        for letter in currentLine:
+            wordSplit.input(letter)
+        line = wordSplit.getLine()
+        searchWord = ""
+        searchWordList = wordSplit.getSearchWords()
+        if len(searchWordList) == 0:
+            searchWord = ""
+        elif len(searchWordList) == 1:
+            searchWord = searchWordList[0]
+        else:
+            for word in searchWordList:
+                searchWord = searchWord + word + ":"
+        print(searchWord)
+        if searchWord == "":
+            regularExpression, replaceStr = getParaReplace(currentLine)
+            currentLine = re.sub(regularExpression, replaceStr, currentLine)
+        else:
+            if searchWord == "tableView:cellForRowAtIndexPath:":
+                result = searchFromApple(searchWord)
+                for dict in result["results"]:
+                
+                print(result)
+            
+        return line
+            
     def _mainFunc(currentLine):
-        currentLine = cleanSpace(currentLine).replace("-(", "- (").replace(") ", ")")
-        regularExpression, replaceStr = getParaReplace(currentLine)
-        currentLine = re.sub(regularExpression, replaceStr, currentLine)
+        print("before:", currentLine)
+        currentLine = _dealStatement(currentLine)
+    
+    #        currentLine = cleanSpace(currentLine).replace("-(", "- (").replace(") ", ")")
+#        regularExpression, replaceStr = getParaReplace(currentLine)
+#        currentLine = re.sub(regularExpression, replaceStr, currentLine)
+        print("after :", currentLine)
+        print("="*50)
         return cleanVoid(currentLine)
     def _mainStatement(line):
         return line.startswith("- (") or line.startswith("-(")
@@ -284,7 +479,7 @@ if __name__ == '__main__':
         output = ""
         for line in outputLins:
             output = output + line
-        print(output)
+#        print(output)
         print("="*50)
         print("end")
     else:
