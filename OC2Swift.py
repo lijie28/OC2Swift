@@ -4,6 +4,7 @@ from enum import Enum
 import json
 import requests
 
+
 replaceRegularExpression = [
                             ['if\s*\((.*)\)\s*\{', 'if \\1 {'],
 #                            ['if\((.*)\)\{', 'if \\1 {'],
@@ -257,10 +258,55 @@ class WordSplit:
             self.word = self.word + letter
                     
                     
-def searchFromApple(word):
+def searchFromApple(word, searchWordList):
     url = 'https://developer.apple.com/search/search_data.php?q=%s' % word
     res = requests.get(url)
-    return res.text
+    if not res.status_code == 200:
+        print(url)
+        print("respond code:", res.status_code)
+        return
+    result = res.json()
+    canTransfer = True
+    transferUrl = ""
+    for dict in result["results"]:
+        contain = True
+        title = dict["title"]
+        for word in searchWordList:
+            if word not in title:
+                contain = False
+                break
+        if contain:
+            languages = dict["api_ref_data"]["languages"]
+            # print("contain:", languages)
+            # canTransfer = len(languages) == 2 and "Objective-C" in languages and "Swift" in languages
+            canTransfer = len(languages) == 2 and "Objective-C" in languages and "Swift" in languages
+            transferUrl = dict["url"]
+            if not transferUrl[1] == "/":
+                transferUrl = "/" + transferUrl
+            if transferUrl[-1] == "/":
+                transferUrl = transferUrl[:-1]
+            # print(canTransfer, transferUrl)
+            if canTransfer:
+                break
+        else:
+            canTransfer = False
+    if canTransfer:
+        objcUrl = "https://developer.apple.com/tutorials/data"+transferUrl+".json"
+        # print(objcUrl)
+        res = requests.get(objcUrl)
+        if not res.status_code == 200:
+            print(objcUrl)
+            print("respond code:", res.status_code)
+            return
+        result = res.json()
+        for section in result["primaryContentSections"]:
+            if "declarations" == section["kind"]:
+                funcStatement = ""
+                for token in section["declarations"][0]["tokens"]:
+                    funcStatement = funcStatement + token["text"]
+                return funcStatement
+        
+        
         
 def replaceFunc(lines):
     def _dealStatement(currentLine):
@@ -278,16 +324,15 @@ def replaceFunc(lines):
         else:
             for word in searchWordList:
                 searchWord = searchWord + word + ":"
-        print(searchWord)
+        # print(searchWord)
         if searchWord == "":
             regularExpression, replaceStr = getParaReplace(currentLine)
             currentLine = re.sub(regularExpression, replaceStr, currentLine)
         else:
-            if searchWord == "tableView:cellForRowAtIndexPath:":
-                result = searchFromApple(searchWord)
-                for dict in result["results"]:
-                
-                print(result)
+            if searchWord == "tableView:cellForRowAt:" or searchWord == "tableView:viewForFooterInSection:":
+                result = searchFromApple(searchWord, searchWordList)
+                if not result == None:
+                    line = result
             
         return line
             
