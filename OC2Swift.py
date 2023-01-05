@@ -3,7 +3,8 @@ import re
 from enum import Enum
 import json
 import requests
-
+from SqlManager import SqlManager
+import time
 
 replaceRegularExpression = [
                             ['if\s*\((.*)\)\s*\{', 'if \\1 {'],
@@ -258,13 +259,24 @@ class WordSplit:
             self.word = self.word + letter
                     
                     
-def searchFromApple(word, searchWordList):
-    url = 'https://developer.apple.com/search/search_data.php?q=%s' % word
+def searchFromApple(keyword, searchWordList):
+    sql = SqlManager()
+    history = sql.search_data(keyword)
+    if len(history) > 0:
+        history = history[0]
+        result = json.loads(history[2])
+        statement = get_new_func_statement(result)
+        # print(statement)
+        return statement
+
+    url = 'https://developer.apple.com/search/search_data.php?q=%s' % keyword
     res = requests.get(url)
     if not res.status_code == 200:
         print(url)
         print("respond code:", res.status_code)
         return
+    #TODO: save search list db
+    # keyword, timestamp, result(json string)
     result = res.json()
     canTransfer = True
     transferUrl = ""
@@ -277,8 +289,6 @@ def searchFromApple(word, searchWordList):
                 break
         if contain:
             languages = dict["api_ref_data"]["languages"]
-            # print("contain:", languages)
-            # canTransfer = len(languages) == 2 and "Objective-C" in languages and "Swift" in languages
             canTransfer = len(languages) == 2 and "Objective-C" in languages and "Swift" in languages
             transferUrl = dict["url"]
             if not transferUrl[1] == "/":
@@ -293,20 +303,32 @@ def searchFromApple(word, searchWordList):
     if canTransfer:
         objcUrl = "https://developer.apple.com/tutorials/data"+transferUrl+".json"
         # print(objcUrl)
+        #TODO: save to db
+        # keyword, timestamp, result(json string)
         res = requests.get(objcUrl)
         if not res.status_code == 200:
             print(objcUrl)
             print("respond code:", res.status_code)
             return
         result = res.json()
-        for section in result["primaryContentSections"]:
-            if "declarations" == section["kind"]:
-                funcStatement = ""
-                for token in section["declarations"][0]["tokens"]:
-                    funcStatement = funcStatement + token["text"]
-                return funcStatement
-        
-        
+        now_time = time.time()
+        sql.insert_data(keyword, str(now_time), json.dumps(result))
+        sql.close()
+        return get_new_func_statement(result)
+
+    sql.close()
+
+
+def get_new_func_statement(result):
+    for section in result["primaryContentSections"]:
+        if "declarations" == section["kind"]:
+            funcStatement = ""
+            for token in section["declarations"][0]["tokens"]:
+                funcStatement = funcStatement + token["text"]
+            return funcStatement
+        else:
+            return ""
+
         
 def replaceFunc(lines):
     def _dealStatement(currentLine):
