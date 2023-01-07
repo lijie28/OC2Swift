@@ -7,28 +7,30 @@ from SqlManager import SqlManager
 import time
 
 replaceRegularExpression = [
-                            ['if\s*\((.*)\)\s*\{', 'if \\1 {'],
-#                            ['if\((.*)\)\{', 'if \\1 {'],
-                            ['\[NSString stringWithFormat:@*(.*)\]', 'String(format: \\1)'],
-                            ['\[(.*) isEqualToString:@*(.*)\]', '\\1 == \\2'],
-                            ['NSString \*(.*) = @*(.*);', 'let \\1 = \\2'],
-                            ['NSString *\*', 'String'],
-                            ['NS', ''],
-                            ['CGRectMake\((.*), (.*), (.*), (.*)\)', 'CGRect(x: \\1, y: \\2, width: \\3, height: \\4)'],
-                            ['\[(.*) count\]', '\\1.count'],
-                            ['BOOL', 'Bool'],
-                            ['', ''],
-                            ['NO', 'false'],
-                            ['YES', 'true'],
-                            ['@"(.*)"', '"\\1"'],
-                            ['#pragma mark - (.*)', '// MARK: - \\1'],
-                            [';', ''],
+    ['if\s*\((.*)\)\s*\{', 'if \\1 {'],
+    #                            ['if\((.*)\)\{', 'if \\1 {'],
+    ['\[NSString stringWithFormat:@*(.*)\]',
+     'String(format: \\1)'],
+    ['\[(.*) isEqualToString:@*(.*)\]', '\\1 == \\2'],
+    ['NSString \*(.*) = @*(.*);', 'let \\1 = \\2'],
+    ['NSString *\*', 'String'],
+    ['NS', ''],
+    ['CGRectMake\((.*), (.*), (.*), (.*)\)',
+     'CGRect(x: \\1, y: \\2, width: \\3, height: \\4)'],
+    ['\[(.*) count\]', '\\1.count'],
+    ['BOOL', 'Bool'],
+    ['', ''],
+    ['NO', 'false'],
+    ['YES', 'true'],
+    ['@"(.*)"', '"\\1"'],
+    ['#pragma mark - (.*)', '// MARK: - \\1'],
+    [';', ''],
 ]
 
 funcReplaceRegularExpression = [
 ]
 
-    
+
 def mainReplaceFunc(lines, mainFunc, mainStatement, appendlineStatement):
     outputLines = []
     currentLine = ""
@@ -59,7 +61,7 @@ def mainReplaceFunc(lines, mainFunc, mainStatement, appendlineStatement):
             appendLineFlag = False
         outputLines.append(currentLine)
     return outputLines
-    
+
 
 def replaceOthers(lines):
     outputLines = lines
@@ -93,17 +95,19 @@ def replaceComment(lines):
             currentLine = line
         outputLines.append(currentLine)
     return outputLines
-    
-    
+
+
 def replaceIf(lines):
     def _mainFunc(line):
         return re.sub('if\s*\((.*)\)\s*\{', 'if \\1 {', line)
+
     def _mainStatement(line):
         return ("if" in line) and ("return" not in line)
+
     def _appendlineStatement(line):
         return ("{" not in line)
     return mainReplaceFunc(lines, _mainFunc, _mainStatement, _appendlineStatement)
-    
+
 
 class WordType(Enum):
     none = 0
@@ -111,7 +115,8 @@ class WordType(Enum):
     body = 2
     parameter = 3
     argument = 4
-    
+
+
 class RecordType(Enum):
     none = 0
     keyword = 1
@@ -122,35 +127,35 @@ class RecordType(Enum):
     symble = 6
     text = 7
     end = 8
-    
-    
+
+
 class WordSplit:
     word = ""
     recordList = []
     wordList = []
     wordType = WordType.none
     recordingType = RecordType.none
-    
+
     def clear(self):
         self.word = ""
         self.recordList = []
         self.wordList = []
         self.wordType = WordType.none
         self.recordingType = RecordType.none
-    
+
     def getWords(self):
         words = []
         for (word, type) in self.wordList:
             words.append(word)
         return words
-    
+
     def getSearchWords(self):
         words = []
         for (word, type) in self.wordList:
             if type == WordType.body:
                 words.append(self.resetWord(word))
         return words
-        
+
     def resetWord(self, word):
         if not word.lower().find("at") == -1:
             index = word.lower().find("at")
@@ -163,22 +168,22 @@ class WordSplit:
             return word[:index+4]
         else:
             return word
-        
+
     def getLine(self):
         line = ""
         for letter in self.recordList:
             line = line + letter
         return line
-    
+
     def isSymble(self, letter):
         return letter in [")", "(", "-", ":", ";", "*"]
-        
+
     def addCurrentWord(self, nextWordType):
         if not self.word == "":
             self.wordList.append((self.word, self.wordType))
             self.wordType = nextWordType
             self.word = ""
-    
+
     def input(self, letter):
         # from left to right
         output = None
@@ -201,7 +206,7 @@ class WordSplit:
                 self.recordList.append(letter)
                 self.recordingType = RecordType.symble
             else:
-#                self.wordList.clear()
+                #                self.wordList.clear()
                 self.recordList.clear()
                 self.recordList.append(letter)
                 self.recordingType = RecordType.symble
@@ -257,26 +262,30 @@ class WordSplit:
             self.recordList.append(letter)
             self.recordingType = RecordType.text
             self.word = self.word + letter
-                    
-                    
+
+
 def searchFromApple(keyword, searchWordList):
     sql = SqlManager()
     history = sql.search_data(keyword)
+    statement = None
     if len(history) > 0:
         history = history[0]
-        result = json.loads(history[2])
-        statement = get_new_func_statement(result)
+        # print(history)
+        if history[2] is None or history[2] == "":
+            # print(keyword, "no value")
+            return
+        else:
+            result = json.loads(history[2])
+            statement = get_new_func_statement(result)
+            # if result == "":
         # print(statement)
         return statement
 
     url = 'https://developer.apple.com/search/search_data.php?q=%s' % keyword
     res = requests.get(url)
     if not res.status_code == 200:
-        print(url)
         print("respond code:", res.status_code)
         return
-    #TODO: save search list db
-    # keyword, timestamp, result(json string)
     result = res.json()
     canTransfer = True
     transferUrl = ""
@@ -288,8 +297,12 @@ def searchFromApple(keyword, searchWordList):
                 contain = False
                 break
         if contain:
+            if not "api_ref_data" in dict.keys() or not "languages" in dict["api_ref_data"].keys():
+                canTransfer = False
+                break
             languages = dict["api_ref_data"]["languages"]
-            canTransfer = len(languages) == 2 and "Objective-C" in languages and "Swift" in languages
+            canTransfer = len(
+                languages) == 2 and "Objective-C" in languages and "Swift" in languages
             transferUrl = dict["url"]
             if not transferUrl[1] == "/":
                 transferUrl = "/" + transferUrl
@@ -302,20 +315,20 @@ def searchFromApple(keyword, searchWordList):
             canTransfer = False
     if canTransfer:
         objcUrl = "https://developer.apple.com/tutorials/data"+transferUrl+".json"
-        # print(objcUrl)
-        #TODO: save to db
-        # keyword, timestamp, result(json string)
         res = requests.get(objcUrl)
         if not res.status_code == 200:
-            print(objcUrl)
             print("respond code:", res.status_code)
             return
         result = res.json()
         now_time = time.time()
+        # print(objcUrl)
+        # print(result)
         sql.insert_data(keyword, str(now_time), json.dumps(result))
         sql.close()
         return get_new_func_statement(result)
 
+    now_time = time.time()
+    sql.insert_data(keyword, str(now_time), "")
     sql.close()
 
 
@@ -329,7 +342,7 @@ def get_new_func_statement(result):
         else:
             return ""
 
-        
+
 def replaceFunc(lines):
     def _dealStatement(currentLine):
         wordSplit = WordSplit()
@@ -351,25 +364,27 @@ def replaceFunc(lines):
             regularExpression, replaceStr = getParaReplace(currentLine)
             currentLine = re.sub(regularExpression, replaceStr, currentLine)
         else:
-            if searchWord == "tableView:cellForRowAt:" or searchWord == "tableView:viewForFooterInSection:":
-                result = searchFromApple(searchWord, searchWordList)
-                if not result == None:
-                    line = result
-            
+            # if searchWord == "tableView:cellForRowAt:" or searchWord == "tableView:viewForFooterInSection:":
+            result = searchFromApple(searchWord, searchWordList)
+            if not result == None:
+                line = result
+
         return line
-            
+
     def _mainFunc(currentLine):
         print("before:", currentLine)
         currentLine = _dealStatement(currentLine)
-    
+
     #        currentLine = cleanSpace(currentLine).replace("-(", "- (").replace(") ", ")")
 #        regularExpression, replaceStr = getParaReplace(currentLine)
 #        currentLine = re.sub(regularExpression, replaceStr, currentLine)
         print("after :", currentLine)
         print("="*50)
         return cleanVoid(currentLine)
+
     def _mainStatement(line):
         return line.startswith("- (") or line.startswith("-(")
+
     def _appendlineStatement(line):
         return not line.endswith("{\n")
     return mainReplaceFunc(lines, _mainFunc, _mainStatement, _appendlineStatement)
@@ -390,15 +405,15 @@ def replaceExecutes(lines):
 #            else:
 #                currentLine = currentLine + line
 #                appendLineFlag = False
-##                currentLine = re.sub("\s+", " ", currentLine)
+# currentLine = re.sub("\s+", " ", currentLine)
 #                regularExpression, replaceStr = getExecutesReplace(currentLine)
 #                currentLine = re.sub(regularExpression, replaceStr, currentLine)
         elif ("[" in line and "@[" not in line) or (line.count("[") > line.count("@[")):
-#            if "]" not in line:
-#                currentLine = line.replace("\n", " ")
-#                appendLineFlag = True
-#                continue
-#            else:
+            #            if "]" not in line:
+            #                currentLine = line.replace("\n", " ")
+            #                appendLineFlag = True
+            #                continue
+            #            else:
             currentLine = line
             appendLineFlag = False
 #                currentLine = re.sub("\s+", " ", currentLine)
@@ -434,7 +449,8 @@ def getParaReplace(text):
         for i in range(1, count):
             paraIndex = i*3 + 1 + 1
             regularExpression = regularExpression + ' (.*):\((.*) *\**\)(.*)'
-            replaceStr = replaceStr + ', \\%d \\%d: \\%d' % (paraIndex, paraIndex+2, paraIndex+1)
+            replaceStr = replaceStr + \
+                ', \\%d \\%d: \\%d' % (paraIndex, paraIndex+2, paraIndex+1)
         regularExpression = regularExpression + ' *\{'
         replaceStr = replaceStr + ') -> \\1 {'
     return regularExpression, replaceStr
@@ -449,8 +465,8 @@ def getExecutesReplace(text):
         regularExpression = '\[\s*(.*) (.*)\s*:\s*(.*)\s*\]'
         replaceStr = '\\1.\\2(\\3)'
     else:
-#        regularExpression = ''
-#        replaceStr = ''
+        #        regularExpression = ''
+        #        replaceStr = ''
         regularExpression = '\[\s*(.*) (.*)\s*:\s*(.*)'
         replaceStr = '\\1.\\2(\\3'
         for i in range(1, count):
@@ -460,21 +476,23 @@ def getExecutesReplace(text):
         regularExpression = regularExpression + '\s*\]'
         replaceStr = replaceStr + ')'
     return regularExpression, replaceStr
-    
-    
+
+
 def replaceAlloc(lines):
     def _mainFunc(currentLine):
         currentLine = re.sub("\s+", " ", currentLine)
         regularExpression, replaceStr = getAllocReplace(currentLine)
         currentLine = re.sub(regularExpression, replaceStr, currentLine)
         return currentLine
+
     def _mainStatement(line):
         return "alloc" in line and "=" in line
+
     def _appendlineStatement(line):
         return "];" not in line
     return mainReplaceFunc(lines, _mainFunc, _mainStatement, _appendlineStatement)
-    
-    
+
+
 def getAllocReplace(text):
     count = text.count(":")
     if count == 0:
@@ -501,7 +519,7 @@ def getAllocReplace(text):
             holder = '\s*'
             replaceStr = '\\1 = \\2(\\3: \\4)'
         regularExpression = '%s(.*) = \[\[(.*) alloc\]\s*initWith(.*)\s*:\s*(.*)\];' % holder
-        
+
     else:
         if ' *' in text:
             holder = '.* \*'
@@ -519,7 +537,8 @@ def getAllocReplace(text):
         for i in range(1, count):
             paraIndex = i*2 + 3
             regularExpression = regularExpression + ' (.*):\s*(.*)'
-            replaceStr = replaceStr + ', \\%d: \\%d' % (paraIndex, paraIndex + 1)
+            replaceStr = replaceStr + \
+                ', \\%d: \\%d' % (paraIndex, paraIndex + 1)
         regularExpression = regularExpression + '\s*];'
         replaceStr = replaceStr + ')'
 #        print(regularExpression)
